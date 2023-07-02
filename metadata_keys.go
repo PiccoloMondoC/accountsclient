@@ -1,4 +1,3 @@
-// sky-accounts/pkg/clientlib/accountslib/metadata_keys.go
 package accountslib
 
 import (
