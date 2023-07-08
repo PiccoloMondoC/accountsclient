@@ -1,3 +1,4 @@
+// sky-accounts/pkg/clientlib/accountslib/celebrity.go
 package accountslib
 
 import (
@@ -47,53 +48,53 @@ type UpdateMemberRoleInCelebrityAccountEvent struct {
 	UserID      uuid.UUID `json:"user_id,omitempty"`
 	NewRole     string    `json:"new_role,omitempty"`
 }
+type AddMemberToCelebrityAccountInput struct {
+	UserID      uuid.UUID `json:"user_id"`
+	RoleID      uuid.UUID `json:"role_id"`
+	CelebrityID uuid.UUID `json:"celebrity_id"`
+}
 
 // CreateCelebrityAccount creates a new celebrity account.
-func (c *Client) CreateCelebrityAccount(input CreateCelebrityAccountInput) (*CreateCelebrityAccountResponse, error) {
-	// Construct the request URL
-	endpointURL, err := url.Parse(c.BaseURL)
-	if err != nil {
-		return nil, err
-	}
-	endpointURL.Path = path.Join(endpointURL.Path, "api/path/to/celebrity/accounts") // Update this with the actual API path
-
-	// Marshal the input into JSON
-	inputJSON, err := json.Marshal(input)
+func (c *Client) CreateCelebrityAccount(input CreateCelebrityAccountInput) (*Celebrity, error) {
+	requestURL, err := url.Parse(c.BaseURL)
 	if err != nil {
 		return nil, err
 	}
 
-	// Create the HTTP request
-	req, err := http.NewRequest("POST", endpointURL.String(), bytes.NewBuffer(inputJSON))
+	requestURL.Path = path.Join(requestURL.Path, "/api/v1/celebrity/")
+
+	payload, err := json.Marshal(input)
 	if err != nil {
 		return nil, err
 	}
 
-	// Set headers
+	req, err := http.NewRequest("POST", requestURL.String(), bytes.NewBuffer(payload))
+	if err != nil {
+		return nil, err
+	}
+
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.Token))
+	req.Header.Set("X-Api-Key", c.ApiKey)
 
-	// Send the request
 	resp, err := c.HttpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	// Read the response body
-	body, err := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusCreated {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to create celebrity account: %s", string(bodyBytes))
+	}
+
+	var newCelebrityAccount Celebrity
+	err = json.NewDecoder(resp.Body).Decode(&newCelebrityAccount)
 	if err != nil {
 		return nil, err
 	}
 
-	// Unmarshal the response body
-	var response CreateCelebrityAccountResponse
-	if err := json.Unmarshal(body, &response); err != nil {
-		return nil, err
-	}
-
-	// Return the response
-	return &response, nil
+	return &newCelebrityAccount, nil
 }
 
 // GetCelebrityAccountByID fetches celebrity account data by ID from the API.
@@ -337,7 +338,7 @@ func (c *Client) ListCelebrityAccounts() ([]Celebrity, error) {
 }
 
 // AddMemberToCelebrityAccount adds a new member to a celebrity account.
-func (c *Client) AddMemberToCelebrityAccount(userID, roleID, celebrityID uuid.UUID) error {
+func (c *Client) AddMemberToCelebrityAccount(input AddMemberToCelebrityAccountInput) error {
 	// Create the URL
 	u, err := url.Parse(c.BaseURL)
 	if err != nil {
@@ -347,9 +348,9 @@ func (c *Client) AddMemberToCelebrityAccount(userID, roleID, celebrityID uuid.UU
 
 	// Create the request body
 	reqBody := &AccountLinkRequest{
-		UserID:      userID,
+		UserID:      input.UserID,
 		AccountType: "celebrity",
-		AccountID:   celebrityID,
+		AccountID:   input.CelebrityID,
 	}
 
 	body, err := json.Marshal(reqBody)

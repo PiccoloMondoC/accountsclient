@@ -1,3 +1,4 @@
+// sky-accounts/pkg/clientlib/accountslib/business.go
 package accountslib
 
 import (
@@ -22,62 +23,71 @@ type Business struct {
 	UpdatedAt     time.Time `json:"updated_at"`
 }
 
-type UpdateBusinessAccountEvent struct {
+type CreateBusinessAccountInput struct {
+	UserID       uuid.UUID `json:"user_id"`
+	BusinessName string    `json:"business_name"`
+}
+
+type UpdateBusinessAccountInput struct {
 	UserID          uuid.UUID `json:"user_id"`
 	BusinessName    string    `json:"business_name"`
 	NewBusinessName string    `json:"new_business_name"`
 	BusinessID      uuid.UUID `json:"business_id"`
 }
 
-type AddMemberToBusinessAccountEvent struct {
+type AddMemberToBusinessAccountInput struct {
 	UserID     uuid.UUID `json:"user_id"`
 	BusinessID uuid.UUID `json:"business_id"`
 	RoleID     uuid.UUID `json:"role_id"`
 }
 
+type UpdateMemberRoleInBusinessAccountInput struct {
+	BusinessID   uuid.UUID `json:"business_id"`
+	MemberUserID uuid.UUID `json:"member_user_id"`
+	NewRoleID    uuid.UUID `json:"new_role_id"`
+}
+
 // CreateBusinessAccount creates a new business account for a given user.
-func (c *Client) CreateBusinessAccount(userID uuid.UUID, businessName string) (*Business, error) {
-	business := &Business{
-		ID:            uuid.New(),
-		UserAccountID: userID,
-		CreatedAt:     time.Now(),
-		UpdatedAt:     time.Now(),
+func (c *Client) CreateBusinessAccount(input CreateBusinessAccountInput) (*Business, error) {
+	requestURL, err := url.Parse(c.BaseURL)
+	if err != nil {
+		return nil, err
 	}
 
-	businessBytes, err := json.Marshal(business)
+	requestURL.Path = path.Join(requestURL.Path, "/api/v1/business/")
+
+	payload, err := json.Marshal(input)
 	if err != nil {
-		return nil, fmt.Errorf("error marshalling business object: %v", err)
+		return nil, err
 	}
 
-	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/api/businesses", c.BaseURL), bytes.NewReader(businessBytes))
+	req, err := http.NewRequest("POST", requestURL.String(), bytes.NewBuffer(payload))
 	if err != nil {
-		return nil, fmt.Errorf("error creating request: %v", err)
+		return nil, err
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.Token))
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.Token)) // This assumes you're using Bearer token authentication
+	req.Header.Set("X-Api-Key", c.ApiKey)
 
 	resp, err := c.HttpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("error executing request: %v", err)
+		return nil, err
 	}
+	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated {
-		return nil, fmt.Errorf("failed to create business account, status code: %d", resp.StatusCode)
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to create business account: %s", string(bodyBytes))
 	}
 
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
+	var newBusinessAccount Business
+	err = json.NewDecoder(resp.Body).Decode(&newBusinessAccount)
 	if err != nil {
-		return nil, fmt.Errorf("error reading response body: %v", err)
+		return nil, err
 	}
 
-	err = json.Unmarshal(body, &business)
-	if err != nil {
-		return nil, fmt.Errorf("error unmarshalling response: %v", err)
-	}
-
-	return business, nil
+	return &newBusinessAccount, nil
 }
 
 func (c *Client) GetBusinessAccountByID(businessID uuid.UUID) (*Business, error) {
@@ -153,7 +163,7 @@ func (c *Client) GetBusinessAccountsByUserID(userID uuid.UUID) ([]Business, erro
 	return businessAccounts, nil
 }
 
-func (u *UpdateBusinessAccountEvent) Validate() error {
+func (u *UpdateBusinessAccountInput) Validate() error {
 	// Perform validation on u fields
 	if u.UserID == uuid.Nil {
 		return errors.New("userID cannot be empty")
@@ -169,29 +179,21 @@ func (u *UpdateBusinessAccountEvent) Validate() error {
 	return nil
 }
 
-func (c *Client) UpdateBusinessAccount(businessID uuid.UUID, newBusinessName string) error {
-	// Create the payload
-	payload := UpdateBusinessAccountEvent{
-		UserID:          businessID, // You might need to replace this with the correct UserID
-		BusinessName:    "",         // You might need to fetch the current business name
-		NewBusinessName: newBusinessName,
-		BusinessID:      businessID,
-	}
-
+func (c *Client) UpdateBusinessAccount(input UpdateBusinessAccountInput) error {
 	// Validate the payload
-	err := payload.Validate()
+	err := input.Validate()
 	if err != nil {
 		return err
 	}
 
 	// Marshal the payload
-	jsonPayload, err := json.Marshal(payload)
+	jsonPayload, err := json.Marshal(input)
 	if err != nil {
 		return err
 	}
 
 	// Create the HTTP request
-	req, err := http.NewRequest("PUT", fmt.Sprintf("%s/%s", c.BaseURL, businessID), bytes.NewBuffer(jsonPayload))
+	req, err := http.NewRequest("PUT", fmt.Sprintf("%s/%s", c.BaseURL, input.BusinessID), bytes.NewBuffer(jsonPayload))
 	if err != nil {
 		return err
 	}
@@ -291,21 +293,38 @@ func (c *Client) ListBusinessAccounts() ([]Business, error) {
 	return businessAccounts, nil
 }
 
-func (c *Client) AddMemberToBusinessAccount(businessID uuid.UUID, userID uuid.UUID, roleID uuid.UUID) error {
+// Define the validation for AddMemberToBusinessAccountInput
+func (input *AddMemberToBusinessAccountInput) Validate() error {
+	if input.UserID == uuid.Nil {
+		return errors.New("UserID cannot be empty")
+	}
+	if input.BusinessID == uuid.Nil {
+		return errors.New("BusinessID cannot be empty")
+	}
+	if input.RoleID == uuid.Nil {
+		return errors.New("RoleID cannot be empty")
+	}
+
+	// Return nil if all checks pass
+	return nil
+}
+
+// Update the AddMemberToBusinessAccount function
+func (c *Client) AddMemberToBusinessAccount(input AddMemberToBusinessAccountInput) error {
+	// Validate the input
+	err := input.Validate()
+	if err != nil {
+		return err
+	}
+
 	requestURL, err := url.Parse(c.BaseURL)
 	if err != nil {
 		return err
 	}
 
-	requestURL.Path = path.Join(requestURL.Path, "businesses", businessID.String(), "members")
+	requestURL.Path = path.Join(requestURL.Path, "businesses", input.BusinessID.String(), "members")
 
-	memberData := &AddMemberToBusinessAccountEvent{
-		UserID:     userID,
-		BusinessID: businessID,
-		RoleID:     roleID,
-	}
-
-	jsonData, err := json.Marshal(memberData)
+	jsonData, err := json.Marshal(input)
 	if err != nil {
 		return err
 	}
@@ -416,20 +435,42 @@ func (c *Client) GetMembersOfBusinessAccount(businessId uuid.UUID) ([]AccountMem
 	return memberships, nil
 }
 
+// Validate validates input data for UpdateMemberRoleInBusinessAccountInput
+func (input *UpdateMemberRoleInBusinessAccountInput) Validate() error {
+	if input.BusinessID == uuid.Nil {
+		return errors.New("BusinessID cannot be empty")
+	}
+	if input.MemberUserID == uuid.Nil {
+		return errors.New("MemberUserID cannot be empty")
+	}
+	if input.NewRoleID == uuid.Nil {
+		return errors.New("NewRoleID cannot be empty")
+	}
+
+	// Return nil if all checks pass
+	return nil
+}
+
 // UpdateMemberRoleInBusinessAccount sends a request to the REST API endpoint to update a member's role in a business account.
-func (c *Client) UpdateMemberRoleInBusinessAccount(businessID uuid.UUID, memberUserID uuid.UUID, newRoleID uuid.UUID) error {
+func (c *Client) UpdateMemberRoleInBusinessAccount(input UpdateMemberRoleInBusinessAccountInput) error {
+	// Validate the input
+	err := input.Validate()
+	if err != nil {
+		return err
+	}
+
 	updateURL, err := url.Parse(c.BaseURL)
 	if err != nil {
 		return fmt.Errorf("invalid base url: %w", err)
 	}
 
-	updateURL.Path = path.Join(updateURL.Path, "api/v1/businesses", businessID.String(), "members", memberUserID.String())
+	updateURL.Path = path.Join(updateURL.Path, "api/v1/businesses", input.BusinessID.String(), "members", input.MemberUserID.String())
 
 	reqBody := &UpdateAccountMembershipEvent{
 		AccountType: "business",
-		AccountID:   businessID,
-		UserID:      memberUserID,
-		Role:        newRoleID.String(),
+		AccountID:   input.BusinessID,
+		UserID:      input.MemberUserID,
+		Role:        input.NewRoleID.String(),
 	}
 	reqBodyBytes, err := json.Marshal(reqBody)
 	if err != nil {

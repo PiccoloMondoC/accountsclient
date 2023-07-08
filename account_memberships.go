@@ -1,3 +1,4 @@
+// sky-accounts/pkg/clientlib/accountslib/account_memberships.go
 package accountslib
 
 import (

@@ -1,3 +1,4 @@
+// sky-accounts/pkg/clientlib/accountslib/agency.go
 package accountslib
 
 import (
@@ -21,10 +22,14 @@ type Agency struct {
 	UpdatedAt     time.Time `json:"updated_at"`
 }
 
-type CreateAgencyAccountEvent struct {
+type CreateAgencyAccountInput struct {
 	UserID     uuid.UUID `json:"user_id"`
 	AgencyName string    `json:"agency_name"`
-	AgencyID   uuid.UUID `json:"agency_id"`
+}
+
+type UpdateAgencyAccountInput struct {
+	AgencyID             uuid.UUID `json:"agency_id"`
+	UpdatedUserAccountID uuid.UUID `json:"updated_user_account_id"`
 }
 
 type AddMemberToAgencyAccountEvent struct {
@@ -34,7 +39,13 @@ type AddMemberToAgencyAccountEvent struct {
 	Role        string    `json:"role"`
 }
 
-func (c *Client) CreateAgencyAccount(userID uuid.UUID, agencyName string) (*Agency, error) {
+type UpdateMemberRoleInAgencyAccountInput struct {
+	AgencyID  uuid.UUID `json:"agency_id"`
+	MemberID  uuid.UUID `json:"member_id"`
+	NewRoleID uuid.UUID `json:"new_role_id"`
+}
+
+func (c *Client) CreateAgencyAccount(input CreateAgencyAccountInput) (*Agency, error) {
 	requestURL, err := url.Parse(c.BaseURL)
 	if err != nil {
 		return nil, err
@@ -42,13 +53,7 @@ func (c *Client) CreateAgencyAccount(userID uuid.UUID, agencyName string) (*Agen
 
 	requestURL.Path = path.Join(requestURL.Path, "/api/v1/agency/")
 
-	agencyAccountEvent := CreateAgencyAccountEvent{
-		UserID:     userID,
-		AgencyName: agencyName,
-		AgencyID:   uuid.New(), // Generate a new UUID for agency account
-	}
-
-	payload, err := json.Marshal(agencyAccountEvent)
+	payload, err := json.Marshal(input)
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +64,7 @@ func (c *Client) CreateAgencyAccount(userID uuid.UUID, agencyName string) (*Agen
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.Token)) // This assumes you're using Bearer token authentication
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.Token))
 	req.Header.Set("X-Api-Key", c.ApiKey)
 
 	resp, err := c.HttpClient.Do(req)
@@ -146,15 +151,12 @@ func (c *Client) GetAgencyAccountsByUserID(userID uuid.UUID) ([]Agency, error) {
 	return agencies, nil
 }
 
-func (c *Client) UpdateAgencyAccount(agencyID uuid.UUID, updatedUserAccountID uuid.UUID) error {
+func (c *Client) UpdateAgencyAccount(input UpdateAgencyAccountInput) error {
 	// Create the request URL
-	reqURL := fmt.Sprintf("%s/api/v1/agencies/%s", c.BaseURL, agencyID)
+	reqURL := fmt.Sprintf("%s/api/v1/agencies/%s", c.BaseURL, input.AgencyID)
 
 	// Create the request body
-	requestBody := map[string]uuid.UUID{
-		"updatedUserAccountID": updatedUserAccountID,
-	}
-	jsonRequestBody, err := json.Marshal(requestBody)
+	jsonRequestBody, err := json.Marshal(input)
 	if err != nil {
 		return err
 	}
@@ -353,11 +355,11 @@ func (c *Client) GetMembersOfAgencyAccount(agencyID uuid.UUID) ([]AccountMembers
 	return memberships, nil
 }
 
-func (c *Client) UpdateMemberRoleInAgencyAccount(agencyID uuid.UUID, memberID uuid.UUID, newRoleID uuid.UUID) error {
-	endpoint := fmt.Sprintf("%s/agencies/%s/members/%s", c.BaseURL, agencyID, memberID)
+func (c *Client) UpdateMemberRoleInAgencyAccount(input UpdateMemberRoleInAgencyAccountInput) error {
+	endpoint := fmt.Sprintf("%s/agencies/%s/members/%s", c.BaseURL, input.AgencyID, input.MemberID)
 
 	updateRoleRequest := map[string]interface{}{
-		"role_id": newRoleID,
+		"role_id": input.NewRoleID,
 	}
 	jsonValue, _ := json.Marshal(updateRoleRequest)
 

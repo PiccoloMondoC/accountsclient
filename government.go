@@ -1,3 +1,4 @@
+// sky-accounts/pkg/clientlib/accountslib/government.go
 package accountslib
 
 import (
@@ -28,16 +29,43 @@ type CreateGovernmentAccountInput struct {
 	GovernmentID   uuid.UUID `json:"government_id"`
 }
 
+type GetGovernmentAccountByIDInput struct {
+	GovernmentID uuid.UUID `json:"government_id"`
+}
+
+type GetGovernmentAccountsByUserIDInput struct {
+	UserID uuid.UUID `json:"user_id"`
+}
+
 type UpdateGovernmentAccountEvent struct {
 	UserID         uuid.UUID `json:"user_id"`
 	GovernmentName string    `json:"government_name"`
 	GovernmentID   uuid.UUID `json:"government_id"`
 }
 
-type AddMemberToGovernmentAccountEvent struct {
+type UpdateGovernmentAccountInput struct {
+	UserID         uuid.UUID `json:"user_id"`
+	GovernmentName string    `json:"government_name"`
+	GovernmentID   uuid.UUID `json:"government_id"`
+}
+
+type DeleteGovernmentAccountInput struct {
+	AccountID uuid.UUID `json:"account_id"`
+}
+
+type AddMemberToGovernmentAccountInput struct {
 	UserID       uuid.UUID `json:"userId"`
 	RoleID       uuid.UUID `json:"roleId"`
 	GovernmentID uuid.UUID `json:"governmentId"`
+}
+
+type RemoveMemberFromGovernmentAccountInput struct {
+	UserID       uuid.UUID `json:"userId"`
+	GovernmentID uuid.UUID `json:"governmentId"`
+}
+
+type GetMembersOfGovernmentAccountInput struct {
+	GovernmentID uuid.UUID `json:"government_id"`
 }
 
 type UpdateMemberRoleInGovernmentAccountEvent struct {
@@ -307,16 +335,24 @@ func (c *Client) ListGovernmentAccounts() ([]Government, error) {
 	return governmentAccounts, nil
 }
 
-func (c *Client) AddMemberToGovernmentAccount(governmentID uuid.UUID, userID uuid.UUID, roleID uuid.UUID) error {
-	// Create the request body
-	reqBody := AddMemberToGovernmentAccountEvent{
-		UserID:       userID,
-		RoleID:       roleID,
-		GovernmentID: governmentID,
+// Validate checks if the UpdateGovernmentAccountEvent is valid
+func (input *AddMemberToGovernmentAccountInput) Validate() error {
+	if input.UserID == uuid.Nil {
+		return fmt.Errorf("user id is required")
+	}
+	if input.GovernmentID == uuid.Nil {
+		return fmt.Errorf("government id is required")
+	}
+	if input.RoleID == uuid.Nil {
+		return errors.New("RoleID cannot be empty")
 	}
 
+	return nil
+}
+
+func (c *Client) AddMemberToGovernmentAccount(input AddMemberToGovernmentAccountInput) error {
 	// Marshal the request body to JSON
-	jsonReqBody, err := json.Marshal(reqBody)
+	jsonReqBody, err := json.Marshal(input)
 	if err != nil {
 		return fmt.Errorf("failed to marshal request body: %w", err)
 	}
@@ -357,12 +393,12 @@ func (c *Client) AddMemberToGovernmentAccount(governmentID uuid.UUID, userID uui
 	return nil
 }
 
-func (c *Client) RemoveMemberFromGovernmentAccount(userID uuid.UUID, governmentID uuid.UUID) error {
+func (c *Client) RemoveMemberFromGovernmentAccount(input RemoveMemberFromGovernmentAccountInput) error {
 	endpoint, err := url.Parse(c.BaseURL)
 	if err != nil {
 		return err
 	}
-	endpoint.Path = path.Join(endpoint.Path, fmt.Sprintf("/government/%s/member/%s", governmentID, userID))
+	endpoint.Path = path.Join(endpoint.Path, fmt.Sprintf("/government/%s/member/%s", input.GovernmentID, input.UserID))
 
 	req, err := http.NewRequest(http.MethodDelete, endpoint.String(), nil)
 	if err != nil {
@@ -389,26 +425,17 @@ func (c *Client) RemoveMemberFromGovernmentAccount(userID uuid.UUID, governmentI
 	return nil
 }
 
-func (c *Client) GetMembersOfGovernmentAccount(governmentID uuid.UUID) ([]AccountMembership, error) {
+func (c *Client) GetMembersOfGovernmentAccount(input GetMembersOfGovernmentAccountInput) ([]AccountMembership, error) {
 	// Prepare the request URL
 	u, err := url.Parse(c.BaseURL)
 	if err != nil {
 		return nil, err
 	}
 
-	u.Path = path.Join(u.Path, "api/government/members")
-
-	// Create a request body
-	reqBody := map[string]string{
-		"government_id": governmentID.String(),
-	}
-	jsonData, err := json.Marshal(reqBody)
-	if err != nil {
-		return nil, err
-	}
+	u.Path = path.Join(u.Path, fmt.Sprintf("api/government/%s/members", input.GovernmentID))
 
 	// Create a new HTTP request
-	req, err := http.NewRequest(http.MethodPost, u.String(), bytes.NewBuffer(jsonData))
+	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
 	if err != nil {
 		return nil, err
 	}

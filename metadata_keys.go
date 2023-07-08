@@ -1,3 +1,4 @@
+// sky-accounts/pkg/clientlib/accountslib/metadata_keys.go
 package accountslib
 
 import (
@@ -19,11 +20,37 @@ type MetadataKey struct {
 	KeyName string    `json:"key_name"`
 }
 
-func (c *Client) CreateMetadataKey(keyName string) (*MetadataKey, error) {
+type CreateMetadataKeyInput struct {
+	KeyName string `json:"key_name"`
+}
+
+type GetMetadataKeyByIDInput struct {
+	MetadataKeyID uuid.UUID `json:"metadata_key_id"`
+	UserID        uuid.UUID `json:"user_id"`
+}
+
+type GetMetadataKeyByKeyNameInput struct {
+	KeyName string `json:"key_name"`
+}
+
+type UpdateMetadataKeyInput struct {
+	ID      uuid.UUID `json:"id"`
+	KeyName string    `json:"key_name"`
+}
+
+type DeleteMetadataKeyInput struct {
+	ID uuid.UUID `json:"id"`
+}
+
+type MetadataKeyExistsInput struct {
+	KeyName string
+}
+
+func (c *Client) CreateMetadataKey(input CreateMetadataKeyInput) (*MetadataKey, error) {
 	// Prepare the metadata key payload
 	payload := MetadataKey{
-		ID:      uuid.New(), // Generate a new UUID
-		KeyName: keyName,    // Assign the provided key name
+		ID:      uuid.New(),    // Generate a new UUID
+		KeyName: input.KeyName, // Assign the provided key name
 	}
 
 	payloadBytes, err := json.Marshal(payload)
@@ -62,7 +89,7 @@ func (c *Client) CreateMetadataKey(keyName string) (*MetadataKey, error) {
 	return &createdMetadataKey, nil
 }
 
-func (c *Client) GetMetadataKeyByID(metadataKeyID uuid.UUID, userID uuid.UUID) (*UserMetadata, error) {
+func (c *Client) GetMetadataKeyByID(input GetMetadataKeyByIDInput) (*UserMetadata, error) {
 	endpoint := fmt.Sprintf("%s/metadata-keys/%s", c.BaseURL, metadataKeyID)
 	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
 	if err != nil {
@@ -99,7 +126,7 @@ func (c *Client) GetMetadataKeyByID(metadataKeyID uuid.UUID, userID uuid.UUID) (
 
 // GetMetadataKeyByKeyName sends a GET request to the /metadata-keys/{keyName} endpoint
 // of the account service to retrieve the metadata key by its key name.
-func (c *Client) GetMetadataKeyByKeyName(keyName string) (*MetadataKey, error) {
+func (c *Client) GetMetadataKeyByKeyName(input GetMetadataKeyByKeyNameInput) (*MetadataKey, error) {
 	// Build the URL for the request
 	reqURL, err := url.Parse(c.BaseURL)
 	if err != nil {
@@ -137,7 +164,7 @@ func (c *Client) GetMetadataKeyByKeyName(keyName string) (*MetadataKey, error) {
 	return &metadataKey, nil
 }
 
-func (c *Client) UpdateMetadataKey(metadataKey MetadataKey) (*MetadataKey, error) {
+func (c *Client) UpdateMetadataKey(input UpdateMetadataKeyInput) (*MetadataKey, error) {
 	// Marshal MetadataKey to JSON
 	data, err := json.Marshal(metadataKey)
 	if err != nil {
@@ -183,7 +210,7 @@ func (c *Client) UpdateMetadataKey(metadataKey MetadataKey) (*MetadataKey, error
 }
 
 // DeleteMetadataKey deletes a metadata key by its id.
-func (c *Client) DeleteMetadataKey(metadataKeyID uuid.UUID) error {
+func (c *Client) DeleteMetadataKey(input DeleteMetadataKeyInput) error {
 	// Create the url
 	u, err := url.Parse(c.BaseURL)
 	if err != nil {

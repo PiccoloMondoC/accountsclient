@@ -1,3 +1,4 @@
+// sky-accounts/pkg/clientlib/accountslib/permissions.go
 package accountslib
 
 import (

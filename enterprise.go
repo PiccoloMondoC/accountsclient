@@ -1,3 +1,4 @@
+// sky-accounts/pkg/clientlib/accountslib/enterprise.go
 package accountslib
 
 import (
@@ -22,8 +23,14 @@ type Enterprise struct {
 	UpdatedAt     time.Time `json:"updated_at"`
 }
 
-// UpdateEnterpriseAccountData is the data structure for the request to update an enterprise account.
-type UpdateEnterpriseAccountData struct {
+type CreateEnterpriseAccountInput struct {
+	UserID         uuid.UUID `json:"user_id"`
+	EnterpriseName string    `json:"enterprise_name"`
+}
+
+// UpdateEnterpriseAccountInput is the data structure for the request to update an enterprise account.
+type UpdateEnterpriseAccountInput struct {
+	UserID               uuid.UUID `json:"user_id"`
 	EnterpriseID         uuid.UUID `json:"enterprise_id"`
 	UpdatedUserAccountID uuid.UUID `json:"updated_user_account_id"`
 }
@@ -45,12 +52,19 @@ type UpdateMemberRoleInEnterpriseAccountRequest struct {
 	NewRoleID    uuid.UUID `json:"new_role_id"`
 }
 
-func (c *Client) CreateEnterpriseAccount(userID uuid.UUID, enterpriseName string) (*Enterprise, error) {
+// AddMemberToEnterpriseAccountInput is the data structure for the request to add a member to an enterprise account.
+type AddMemberToEnterpriseAccountInput struct {
+	EnterpriseID uuid.UUID `json:"enterprise_id"`
+	UserID       uuid.UUID `json:"user_id"`
+	RoleID       uuid.UUID `json:"role_id"`
+}
+
+func (c *Client) CreateEnterpriseAccount(input CreateEnterpriseAccountInput) (*Enterprise, error) {
 	enterpriseID := uuid.New() // generate a new UUID for the enterprise account
 
 	enterprise := &Enterprise{
 		ID:            enterpriseID,
-		UserAccountID: userID,
+		UserAccountID: input.UserID,
 		CreatedAt:     time.Now(),
 		UpdatedAt:     time.Now(),
 	}
@@ -162,24 +176,20 @@ func (c *Client) GetEnterpriseAccountsByUserID(userID uuid.UUID) ([]Enterprise, 
 	return enterprises, nil
 }
 
-func (c *Client) UpdateEnterpriseAccount(userID uuid.UUID, enterpriseID uuid.UUID, updatedUserAccountID uuid.UUID) error {
+func (c *Client) UpdateEnterpriseAccount(input UpdateEnterpriseAccountInput) error {
 	// Validate input
-	if userID == uuid.Nil || enterpriseID == uuid.Nil || updatedUserAccountID == uuid.Nil {
+	if input.UserID == uuid.Nil || input.EnterpriseID == uuid.Nil || input.UpdatedUserAccountID == uuid.Nil {
 		return errors.New("invalid input parameters")
 	}
 
 	// Prepare data for the PUT request
-	data := UpdateEnterpriseAccountData{
-		EnterpriseID:         enterpriseID,
-		UpdatedUserAccountID: updatedUserAccountID,
-	}
-	jsonData, err := json.Marshal(data)
+	jsonData, err := json.Marshal(input)
 	if err != nil {
 		return fmt.Errorf("failed to marshal request data: %w", err)
 	}
 
 	// Create URL
-	relativePath := path.Join("api", "enterprise", userID.String())
+	relativePath := path.Join("api", "enterprise", input.UserID.String())
 	url, err := url.Parse(c.BaseURL)
 	if err != nil {
 		return fmt.Errorf("failed to parse base URL: %w", err)
@@ -296,20 +306,20 @@ func (c *Client) ListEnterpriseAccounts() ([]*Enterprise, error) {
 	return enterpriseAccountsResp.EnterpriseAccounts, nil
 }
 
-func (c *Client) AddMemberToEnterpriseAccount(enterpriseID, userID, roleID uuid.UUID) error {
+func (c *Client) AddMemberToEnterpriseAccount(input AddMemberToEnterpriseAccountInput) error {
 	// Create the URL for the API endpoint
 	u, err := url.Parse(c.BaseURL)
 	if err != nil {
 		return err
 	}
 
-	u.Path = path.Join(u.Path, "api", "enterprise", enterpriseID.String(), "member")
+	u.Path = path.Join(u.Path, "api", "enterprise", input.EnterpriseID.String(), "member")
 
 	// Create a struct for the request body
 	reqBody := AddMemberToEnterpriseAccountEvent{
-		UserID:       userID,
-		RoleID:       roleID,
-		EnterpriseID: enterpriseID,
+		UserID:       input.UserID,
+		RoleID:       input.RoleID,
+		EnterpriseID: input.EnterpriseID,
 	}
 
 	// Convert the request body to JSON
