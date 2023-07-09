@@ -1,3 +1,4 @@
+// sky-accounts/pkg/clientlib/accountslib/sanctioned_countries.go
 package accountslib
 
 import (
@@ -21,14 +22,27 @@ type SanctionedCountry struct {
 	AddedAt     time.Time `json:"added_at"`
 }
 
-func (c *Client) IsCountrySanctioned(countryCode string) (bool, error) {
+type IsCountrySanctionedInput struct {
+	CountryCode string
+}
+
+type AddSanctionedCountryInput struct {
+	CountryCode string
+	CountryName string
+}
+
+type RemoveSanctionedCountryInput struct {
+	CountryCode string
+}
+
+func (c *Client) IsCountrySanctioned(input IsCountrySanctionedInput) (bool, error) {
 	// Validate the country code
-	if len(countryCode) < 2 || len(countryCode) > 3 {
+	if len(input.CountryCode) < 2 || len(input.CountryCode) > 3 {
 		return false, errors.New("invalid country code")
 	}
 
 	// Create a new HTTP request
-	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/api/sanctions/countries/%s", c.BaseURL, url.PathEscape(countryCode)), nil)
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/api/sanctions/countries/%s", c.BaseURL, url.PathEscape(input.CountryCode)), nil)
 	if err != nil {
 		return false, fmt.Errorf("unable to create new request: %w", err)
 	}
@@ -62,11 +76,11 @@ func (c *Client) IsCountrySanctioned(countryCode string) (bool, error) {
 	return result.IsSanctioned, nil
 }
 
-func (c *Client) AddSanctionedCountry(countryCode string, countryName string) error {
+func (c *Client) AddSanctionedCountry(input AddSanctionedCountryInput) error {
 	// Create the payload
 	payload := SanctionedCountry{
-		CountryCode: countryCode,
-		CountryName: countryName,
+		CountryCode: input.CountryCode,
+		CountryName: input.CountryName,
 		AddedAt:     time.Now(),
 	}
 
@@ -103,14 +117,14 @@ func (c *Client) AddSanctionedCountry(countryCode string, countryName string) er
 	return nil
 }
 
-func (c *Client) RemoveSanctionedCountry(countryCode string) error {
+func (c *Client) RemoveSanctionedCountry(input RemoveSanctionedCountryInput) error {
 	// Validation
-	if len(countryCode) < 2 || len(countryCode) > 3 {
+	if len(input.CountryCode) < 2 || len(input.CountryCode) > 3 {
 		return errors.New("invalid country code")
 	}
 
 	// Create a new HTTP request
-	req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("%s/api/sanctioned-countries/%s", c.BaseURL, countryCode), nil)
+	req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("%s/api/sanctioned-countries/%s", c.BaseURL, input.CountryCode), nil)
 	if err != nil {
 		return fmt.Errorf("unable to create new request: %w", err)
 	}

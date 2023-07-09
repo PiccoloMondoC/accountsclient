@@ -1,3 +1,4 @@
+// sky-accounts/pkg/clientlib/accountslib/users.go
 package accountslib
 
 import (
@@ -15,7 +16,6 @@ import (
 	validation "github.com/go-ozzo/ozzo-validation"
 	"github.com/go-ozzo/ozzo-validation/is"
 	"github.com/google/uuid"
-	"golang.org/x/crypto/bcrypt"
 )
 
 // User represents the structure of a user.
@@ -43,10 +43,16 @@ type UserRegistrationData struct {
 	Password string `json:"password"`
 }
 
-// UserAuthentication represents the input for user authentication.
-type UserAuthentication struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
+type UpdateUserPayload struct {
+	Email            *string `json:"email,omitempty"`
+	Username         *string `json:"username,omitempty"`
+	FirstName        *string `json:"first_name,omitempty"`
+	LastName         *string `json:"last_name,omitempty"`
+	DisplayName      *string `json:"display_name,omitempty"`
+	IsActive         *bool   `json:"is_active,omitempty"`
+	IsEmailVerified  *bool   `json:"is_email_verified,omitempty"`
+	IsPhoneVerified  *bool   `json:"is_phone_verified,omitempty"`
+	TwoFactorEnabled *bool   `json:"two_factor_enabled,omitempty"`
 }
 
 // SetUserActiveStatusEvent represents the event of a user's active status change.
@@ -60,6 +66,15 @@ type VerifyEmailEvent struct {
 	Email  string    `json:"email"`
 }
 
+type EnableTwoFactorAuthenticationInput struct {
+	UserID           uuid.UUID `json:"user_id"`
+	TwoFactorEnabled bool      `json:"two_factor_enabled"`
+}
+
+type DisableTwoFactorAuthenticationInput struct {
+	UserID uuid.UUID `json:"user_id"`
+}
+
 // UserRemoveRoleEvent represents the payload structure for the RemoveRoleFromUser event.
 type UserRemoveRoleEvent struct {
 	UserID uuid.UUID `json:"user_id"`
@@ -68,6 +83,28 @@ type UserRemoveRoleEvent struct {
 
 type RolesForUserResponse struct {
 	Roles []Role `json:"roles"`
+}
+
+type UserRoleData struct {
+	UserID uuid.UUID `json:"user_id"`
+	RoleID uuid.UUID `json:"role_id"`
+}
+
+// AssignRoleData represents the input data to assign a role to a user.
+type AssignRoleData struct {
+	UserID uuid.UUID `json:"user_id"`
+	RoleID uuid.UUID `json:"role_id"`
+}
+
+type UserUnassignRoleInput struct {
+	UserID uuid.UUID `json:"user_id"`
+	RoleID uuid.UUID `json:"role_id"`
+}
+
+// UserInRoleCheckData represents the input data for a user role check.
+type UserInRoleCheckData struct {
+	UserID uuid.UUID `json:"user_id"`
+	RoleID uuid.UUID `json:"role_id"`
 }
 
 var emailRegex = regexp.MustCompile(`^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,4}$`)
@@ -254,18 +291,6 @@ func (c *Client) GetUserByEmail(email string) (*User, error) {
 	return &user, nil
 }
 
-type UpdateUserPayload struct {
-	Email            *string `json:"email,omitempty"`
-	Username         *string `json:"username,omitempty"`
-	FirstName        *string `json:"first_name,omitempty"`
-	LastName         *string `json:"last_name,omitempty"`
-	DisplayName      *string `json:"display_name,omitempty"`
-	IsActive         *bool   `json:"is_active,omitempty"`
-	IsEmailVerified  *bool   `json:"is_email_verified,omitempty"`
-	IsPhoneVerified  *bool   `json:"is_phone_verified,omitempty"`
-	TwoFactorEnabled *bool   `json:"two_factor_enabled,omitempty"`
-}
-
 func (u *UpdateUserPayload) Validate() error {
 	return validation.ValidateStruct(u,
 		validation.Field(&u.Email, validation.NilOrNotEmpty, is.Email),
@@ -338,73 +363,6 @@ func (c *Client) DeleteUser(userID uuid.UUID) error {
 	}
 
 	return nil
-}
-
-// Validate validates UserAuthentication data.
-func (ua *UserAuthentication) Validate() error {
-	return validation.ValidateStruct(ua,
-		validation.Field(&ua.Email, validation.Required, is.Email),
-		validation.Field(&ua.Password, validation.Required),
-	)
-}
-
-// AuthenticateUser authenticates a user, returning an error if unsuccessful.
-func (c *Client) AuthenticateUser(email string, password string) (*User, error) {
-	// Create the payload
-	payload := UserAuthentication{
-		Email:    email,
-		Password: password,
-	}
-
-	// Validate the payload
-	err := payload.Validate()
-	if err != nil {
-		return nil, err
-	}
-
-	// Marshal the payload
-	jsonPayload, err := json.Marshal(payload)
-	if err != nil {
-		return nil, err
-	}
-
-	// Create a new HTTP request
-	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/api/authenticate", c.BaseURL), bytes.NewBuffer(jsonPayload))
-	if err != nil {
-		return nil, fmt.Errorf("unable to create new request: %w", err)
-	}
-
-	// Set the appropriate headers
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.Token)
-	req.Header.Set("X-API-Key", c.ApiKey)
-
-	// Send the HTTP request
-	res, err := c.HttpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("unable to send request: %w", err)
-	}
-	defer res.Body.Close()
-
-	// Check the status code
-	if res.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(res.Body)
-		return nil, fmt.Errorf("unexpected status code: got %v, body: %s", res.StatusCode, body)
-	}
-
-	// Decode the response
-	var user User
-	err = json.NewDecoder(res.Body).Decode(&user)
-	if err != nil {
-		return nil, fmt.Errorf("unable to decode response: %w", err)
-	}
-
-	// Verify the password
-	if err := bcrypt.CompareHashAndPassword(user.PasswordHash, []byte(password)); err != nil {
-		return nil, fmt.Errorf("invalid password: %w", err)
-	}
-
-	return &user, nil
 }
 
 // Validate validates the SetUserActiveStatusEvent data.
@@ -547,14 +505,14 @@ func (c *Client) VerifyPhoneNumber(user *User) error {
 	return nil
 }
 
-func (c *Client) EnableTwoFactorAuthentication(userID uuid.UUID, enable bool) error {
+func (c *Client) EnableTwoFactorAuthentication(data EnableTwoFactorAuthenticationInput) error {
 	// Create the payload
 	payload := struct {
 		UserID           uuid.UUID `json:"user_id"`
 		TwoFactorEnabled bool      `json:"two_factor_enabled"`
 	}{
-		UserID:           userID,
-		TwoFactorEnabled: enable,
+		UserID:           data.UserID,
+		TwoFactorEnabled: data.TwoFactorEnabled,
 	}
 
 	isTrue := func(value interface{}) error {
@@ -580,7 +538,7 @@ func (c *Client) EnableTwoFactorAuthentication(userID uuid.UUID, enable bool) er
 	}
 
 	// Create a new HTTP request
-	req, err := http.NewRequest(http.MethodPut, fmt.Sprintf("%s/api/users/%s/enableTwoFactorAuthentication", c.BaseURL, userID), bytes.NewBuffer(jsonPayload))
+	req, err := http.NewRequest(http.MethodPut, fmt.Sprintf("%s/api/users/%s/enableTwoFactorAuthentication", c.BaseURL, data.UserID), bytes.NewBuffer(jsonPayload)) // use data.UserID instead of userID
 	if err != nil {
 		return fmt.Errorf("unable to create new request: %w", err)
 	}
@@ -606,14 +564,14 @@ func (c *Client) EnableTwoFactorAuthentication(userID uuid.UUID, enable bool) er
 	return nil
 }
 
-func (c *Client) DisableTwoFactorAuthentication(userID uuid.UUID, disable bool) error {
+func (c *Client) DisableTwoFactorAuthentication(data DisableTwoFactorAuthenticationInput) error {
 	// Create the payload
 	payload := struct {
 		UserID           uuid.UUID `json:"user_id"`
 		TwoFactorEnabled bool      `json:"two_factor_enabled"`
 	}{
-		UserID:           userID,
-		TwoFactorEnabled: disable,
+		UserID:           data.UserID,
+		TwoFactorEnabled: false,
 	}
 
 	// Validate the payload
@@ -632,7 +590,7 @@ func (c *Client) DisableTwoFactorAuthentication(userID uuid.UUID, disable bool) 
 	}
 
 	// Create a new HTTP request
-	req, err := http.NewRequest(http.MethodPut, fmt.Sprintf("%s/api/users/%s/disableTwoFactorAuthentication", c.BaseURL, userID), bytes.NewBuffer(jsonPayload))
+	req, err := http.NewRequest(http.MethodPut, fmt.Sprintf("%s/api/users/%s/disableTwoFactorAuthentication", c.BaseURL, data.UserID), bytes.NewBuffer(jsonPayload))
 	if err != nil {
 		return fmt.Errorf("unable to create new request: %w", err)
 	}
@@ -831,23 +789,23 @@ func (c *Client) GetRolesForUser(userID uuid.UUID) ([]Role, error) {
 	return resp.Roles, nil
 }
 
+// Validate checks if the AssignRoleData structure is valid.
+func (d *AssignRoleData) Validate() error {
+	return validation.ValidateStruct(d,
+		validation.Field(&d.UserID, validation.Required, validation.NotIn(uuid.Nil).Error("Invalid UserID")),
+		validation.Field(&d.RoleID, validation.Required, validation.NotIn(uuid.Nil).Error("Invalid RoleID")),
+	)
+}
+
 // AssignRoleToUser assigns a role to a user
-func (c *Client) AssignRoleToUser(userID uuid.UUID, roleID uuid.UUID) error {
-	// Create the payload
-	payload := map[string]uuid.UUID{
-		"user_id": userID,
-		"role_id": roleID,
+func (c *Client) AssignRoleToUser(data *AssignRoleData) error {
+	// Validate the data
+	if err := data.Validate(); err != nil {
+		return err
 	}
 
-	// Validate the payload
-	for _, id := range payload {
-		if id == uuid.Nil {
-			return errors.New("invalid ID")
-		}
-	}
-
-	// Marshal the payload
-	jsonPayload, err := json.Marshal(payload)
+	// Marshal the data
+	jsonData, err := json.Marshal(data)
 	if err != nil {
 		return err
 	}
@@ -858,8 +816,8 @@ func (c *Client) AssignRoleToUser(userID uuid.UUID, roleID uuid.UUID) error {
 		return fmt.Errorf("invalid base URL: %w", err)
 	}
 
-	endpoint.Path = path.Join(endpoint.Path, "api", "users", userID.String(), "roles", roleID.String())
-	req, err := http.NewRequest(http.MethodPost, endpoint.String(), bytes.NewBuffer(jsonPayload))
+	endpoint.Path = path.Join(endpoint.Path, "api", "users", data.UserID.String(), "roles", data.RoleID.String())
+	req, err := http.NewRequest(http.MethodPost, endpoint.String(), bytes.NewBuffer(jsonData))
 	if err != nil {
 		return fmt.Errorf("unable to create new request: %w", err)
 	}
@@ -886,17 +844,17 @@ func (c *Client) AssignRoleToUser(userID uuid.UUID, roleID uuid.UUID) error {
 }
 
 // UnassignRoleFromUser removes a role from a user.
-func (c *Client) UnassignRoleFromUser(userID, roleID uuid.UUID) error {
+func (c *Client) UnassignRoleFromUser(input *UserUnassignRoleInput) error {
 	// Validate the parameters
-	if userID == uuid.Nil {
+	if input.UserID == uuid.Nil {
 		return errors.New("invalid user ID")
 	}
-	if roleID == uuid.Nil {
+	if input.RoleID == uuid.Nil {
 		return errors.New("invalid role ID")
 	}
 
 	// Create a new HTTP request
-	req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("%s/api/users/%s/roles/%s", c.BaseURL, userID, roleID), nil)
+	req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("%s/api/users/%s/roles/%s", c.BaseURL, input.UserID, input.RoleID), nil)
 	if err != nil {
 		return fmt.Errorf("unable to create new request: %w", err)
 	}
@@ -922,13 +880,13 @@ func (c *Client) UnassignRoleFromUser(userID, roleID uuid.UUID) error {
 	return nil
 }
 
-func (c *Client) IsUserInRole(userID, roleID uuid.UUID) (bool, error) {
+func (c *Client) IsUserInRole(data *UserInRoleCheckData) (bool, error) {
 	// Create the URL
 	url, err := url.Parse(c.BaseURL)
 	if err != nil {
 		return false, fmt.Errorf("unable to parse base url: %w", err)
 	}
-	url.Path = path.Join(url.Path, fmt.Sprintf("api/users/%s/roles/%s", userID, roleID))
+	url.Path = path.Join(url.Path, fmt.Sprintf("api/users/%s/roles/%s", data.UserID, data.RoleID))
 
 	// Create a new HTTP request
 	req, err := http.NewRequest(http.MethodGet, url.String(), nil)

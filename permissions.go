@@ -1,3 +1,4 @@
+// sky-accounts/pkg/clientlib/accountslib/permissions.go
 package accountslib
 
 import (
@@ -18,6 +19,45 @@ type Permission struct {
 	ID          uuid.UUID `json:"id"`
 	Name        string    `json:"name"`
 	Description string    `json:"description"`
+}
+
+type CreatePermissionInput struct {
+	Name        string
+	Description string
+}
+
+type GetPermissionByIDInput struct {
+	PermissionID uuid.UUID
+}
+
+type GetPermissionByNameInput struct {
+	PermissionName string
+}
+
+type UpdatePermissionInput struct {
+	ID          uuid.UUID `json:"id"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+}
+
+type DeletePermissionInput struct {
+	ID uuid.UUID `json:"id"`
+}
+
+type ListPermissionsResponse struct {
+	Permissions []Permission `json:"permissions"`
+}
+
+type DoesPermissionExistInput struct {
+	PermissionID uuid.UUID
+}
+
+type GetPermissionsByUserIDInput struct {
+	UserID uuid.UUID
+}
+
+type GetPermissionsByRoleIDInput struct {
+	RoleID uuid.UUID
 }
 
 func (c *Client) CreatePermission(permission *Permission) (*Permission, error) {
@@ -252,7 +292,7 @@ func (c *Client) DeletePermission(permissionID uuid.UUID) error {
 	return nil
 }
 
-func (c *Client) ListPermissions() ([]Permission, error) {
+func (c *Client) ListPermissions() (*ListPermissionsResponse, error) {
 	// Create a new HTTP request
 	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/api/permissions", c.BaseURL), nil)
 	if err != nil {
@@ -277,18 +317,18 @@ func (c *Client) ListPermissions() ([]Permission, error) {
 		return nil, fmt.Errorf("unexpected status code: got %v, body: %s", res.StatusCode, body)
 	}
 
-	// Parse the response
-	var permissions []Permission
-	if err := json.NewDecoder(res.Body).Decode(&permissions); err != nil {
+	// Unmarshal the response
+	var response ListPermissionsResponse
+	if err := json.NewDecoder(res.Body).Decode(&response); err != nil {
 		return nil, fmt.Errorf("unable to decode response: %w", err)
 	}
 
-	return permissions, nil
+	return &response, nil
 }
 
-func (c *Client) DoesPermissionExist(permissionID uuid.UUID) (bool, error) {
+func (c *Client) DoesPermissionExist(input *DoesPermissionExistInput) (bool, error) {
 	// Create a new HTTP request
-	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/api/permissions/%s", c.BaseURL, permissionID.String()), nil)
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/api/permissions/%s", c.BaseURL, input.PermissionID.String()), nil)
 	if err != nil {
 		return false, fmt.Errorf("unable to create new request: %w", err)
 	}
@@ -319,10 +359,9 @@ func (c *Client) DoesPermissionExist(permissionID uuid.UUID) (bool, error) {
 	}
 }
 
-// GetPermissionsByUserID sends a GET request to retrieve permissions by user ID.
-func (c *Client) GetPermissionsByUserID(userID uuid.UUID) ([]Permission, error) {
+func (c *Client) GetPermissionsByUserID(input *GetPermissionsByUserIDInput) ([]Permission, error) {
 	// Prepare the API endpoint with the user ID
-	endpoint := fmt.Sprintf("%s/api/permissions/user/%s", c.BaseURL, userID.String())
+	endpoint := fmt.Sprintf("%s/api/permissions/user/%s", c.BaseURL, input.UserID.String())
 
 	// Create a new HTTP request
 	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
@@ -359,9 +398,9 @@ func (c *Client) GetPermissionsByUserID(userID uuid.UUID) ([]Permission, error) 
 }
 
 // GetPermissionsByRoleID fetches the permissions associated with the provided role ID.
-func (c *Client) GetPermissionsByRoleID(roleID uuid.UUID) ([]Permission, error) {
+func (c *Client) GetPermissionsByRoleID(input *GetPermissionsByRoleIDInput) ([]Permission, error) {
 	// Create a new HTTP request
-	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/api/roles/%s/permissions", c.BaseURL, roleID), nil)
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/api/roles/%s/permissions", c.BaseURL, input.RoleID.String()), nil)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create new request: %w", err)
 	}

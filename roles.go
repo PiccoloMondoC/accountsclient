@@ -1,3 +1,4 @@
+// sky-accounts/pkg/clientlib/accountslib/roles.go
 package accountslib
 
 import (
@@ -31,10 +32,41 @@ type RoleData struct {
 	IsInternal        bool   `json:"is_internal"`
 }
 
+type CreateRoleInput struct {
+	Name              string
+	Description       string
+	CompanyDomainOnly bool
+	IsInternal        bool
+	UserID            uuid.UUID
+}
+
+type UpdateRoleInput struct {
+	Role   *Role
+	UserID uuid.UUID
+}
+
+type DeleteRoleInput struct {
+	RoleID uuid.UUID
+	UserID uuid.UUID
+}
+
+type DoesRoleExistInput struct {
+	RoleID uuid.UUID
+}
+
+type GetRolesByUserIDInput struct {
+	UserID uuid.UUID
+}
+
 type AssignPermissionToRoleEvent struct {
 	RoleID       uuid.UUID `json:"role_id"`
 	PermissionID uuid.UUID `json:"permission_id"`
 	// You can add other fields if needed
+}
+
+type AssignPermissionToRoleInput struct {
+	RoleID       uuid.UUID
+	PermissionID uuid.UUID
 }
 
 type RemovePermissionFromRoleEvent struct {
@@ -42,8 +74,22 @@ type RemovePermissionFromRoleEvent struct {
 	PermissionID uuid.UUID `json:"permission_id"`
 }
 
-func (r *RoleData) Validate() error {
-	if r.Name == "" {
+type RemovePermissionFromRoleInput struct {
+	RoleID       uuid.UUID
+	PermissionID uuid.UUID
+}
+
+type GetRolesByPermissionIDInput struct {
+	PermissionID uuid.UUID
+}
+
+type IsPermissionAssignedToRoleInput struct {
+	RoleID       uuid.UUID
+	PermissionID uuid.UUID
+}
+
+func (input *CreateRoleInput) Validate() error {
+	if input.Name == "" {
 		return errors.New("role name is required")
 	}
 	return nil
@@ -52,15 +98,20 @@ func (r *RoleData) Validate() error {
 // userIDKey is a type for context value for the userID key.
 type userIDKey struct{}
 
-func (c *Client) CreateRole(roleData *RoleData, userID uuid.UUID) (*Role, error) {
+func (c *Client) CreateRole(input *CreateRoleInput) (*Role, error) {
 	// Validate the input data
-	err := roleData.Validate()
+	err := input.Validate()
 	if err != nil {
 		return nil, err
 	}
 
 	// Marshal the roleData
-	jsonRoleData, err := json.Marshal(roleData)
+	jsonRoleData, err := json.Marshal(RoleData{
+		Name:              input.Name,
+		Description:       input.Description,
+		CompanyDomainOnly: input.CompanyDomainOnly,
+		IsInternal:        input.IsInternal,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("unable to marshal roleData: %w", err)
 	}
@@ -77,7 +128,7 @@ func (c *Client) CreateRole(roleData *RoleData, userID uuid.UUID) (*Role, error)
 	req.Header.Set("X-API-Key", c.ApiKey)
 
 	// Add user id to the request context
-	ctx := context.WithValue(req.Context(), userIDKey{}, userID)
+	ctx := context.WithValue(req.Context(), userIDKey{}, input.UserID)
 	req = req.WithContext(ctx)
 
 	// Send the HTTP request
@@ -179,14 +230,14 @@ func (c *Client) GetRoleByName(roleName string) (*Role, error) {
 	return &role, nil
 }
 
-func (c *Client) UpdateRole(role *Role) error {
+func (c *Client) UpdateRole(input *UpdateRoleInput) error {
 	// Create the payload
 	payload := Role{
-		ID:                role.ID,
-		Name:              role.Name,
-		Description:       role.Description,
-		CompanyDomainOnly: role.CompanyDomainOnly,
-		IsInternal:        role.IsInternal,
+		ID:                input.Role.ID,
+		Name:              input.Role.Name,
+		Description:       input.Role.Description,
+		CompanyDomainOnly: input.Role.CompanyDomainOnly,
+		IsInternal:        input.Role.IsInternal,
 	}
 
 	// Marshal the payload
@@ -196,7 +247,7 @@ func (c *Client) UpdateRole(role *Role) error {
 	}
 
 	// Create a new HTTP request
-	req, err := http.NewRequest(http.MethodPut, fmt.Sprintf("%s/api/roles/%s", c.BaseURL, role.ID), bytes.NewBuffer(jsonPayload))
+	req, err := http.NewRequest(http.MethodPut, fmt.Sprintf("%s/api/roles/%s", c.BaseURL, input.Role.ID), bytes.NewBuffer(jsonPayload))
 	if err != nil {
 		return fmt.Errorf("unable to create new request: %w", err)
 	}
@@ -223,9 +274,9 @@ func (c *Client) UpdateRole(role *Role) error {
 }
 
 // DeleteRole deletes a role using the API.
-func (c *Client) DeleteRole(roleID uuid.UUID) error {
+func (c *Client) DeleteRole(input *DeleteRoleInput) error {
 	// Create a new HTTP request
-	req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("%s/api/roles/%s", c.BaseURL, roleID), nil)
+	req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("%s/api/roles/%s", c.BaseURL, input.RoleID), nil)
 	if err != nil {
 		return fmt.Errorf("unable to create new request: %w", err)
 	}
@@ -285,9 +336,9 @@ func (c *Client) ListRoles() ([]Role, error) {
 	return roles, nil
 }
 
-func (c *Client) DoesRoleExist(roleID uuid.UUID) (bool, error) {
+func (c *Client) DoesRoleExist(input DoesRoleExistInput) (bool, error) {
 	// Create a new HTTP request
-	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/api/roles/%s/does_exist", c.BaseURL, roleID), nil)
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/api/roles/%s/does_exist", c.BaseURL, input.RoleID), nil)
 	if err != nil {
 		return false, fmt.Errorf("unable to create new request: %w", err)
 	}
@@ -322,9 +373,9 @@ func (c *Client) DoesRoleExist(roleID uuid.UUID) (bool, error) {
 	return exists.Exists, nil
 }
 
-func (c *Client) GetRolesByUserID(userID uuid.UUID) ([]Role, error) {
+func (c *Client) GetRolesByUserID(input GetRolesByUserIDInput) ([]Role, error) {
 	// Create a new HTTP request
-	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/api/users/%s/roles", c.BaseURL, userID), nil)
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/api/users/%s/roles", c.BaseURL, input.UserID), nil)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create new request: %w", err)
 	}
@@ -358,32 +409,32 @@ func (c *Client) GetRolesByUserID(userID uuid.UUID) ([]Role, error) {
 }
 
 // You would also need to define the Validate method for AssignPermissionToRoleEvent
-func (e *AssignPermissionToRoleEvent) Validate() error {
+func (input *AssignPermissionToRoleInput) Validate() error {
 	// Add validation logic here (e.g. checking if RoleID and PermissionID are not empty)
-	if e.RoleID == uuid.Nil {
+	if input.RoleID == uuid.Nil {
 		return errors.New("RoleID cannot be empty")
 	}
-	if e.PermissionID == uuid.Nil {
+	if input.PermissionID == uuid.Nil {
 		return errors.New("PermissionID cannot be empty")
 	}
 	return nil
 }
 
-func (c *Client) AssignPermissionToRole(event *AssignPermissionToRoleEvent) error {
+func (c *Client) AssignPermissionToRole(input AssignPermissionToRoleInput) error {
 	// Validate the payload
-	err := event.Validate()
+	err := input.Validate()
 	if err != nil {
 		return err
 	}
 
 	// Marshal the payload
-	jsonPayload, err := json.Marshal(event)
+	jsonPayload, err := json.Marshal(input)
 	if err != nil {
 		return err
 	}
 
 	// Create a new HTTP request
-	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/api/roles/%s/permissions/%s", c.BaseURL, event.RoleID, event.PermissionID), bytes.NewBuffer(jsonPayload))
+	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/api/roles/%s/permissions/%s", c.BaseURL, input.RoleID, input.PermissionID), bytes.NewBuffer(jsonPayload))
 	if err != nil {
 		return fmt.Errorf("unable to create new request: %w", err)
 	}
@@ -409,27 +460,27 @@ func (c *Client) AssignPermissionToRole(event *AssignPermissionToRoleEvent) erro
 	return nil
 }
 
-func (e *RemovePermissionFromRoleEvent) Validate() error {
-	if e.RoleID == uuid.Nil {
+func (input *RemovePermissionFromRoleInput) Validate() error {
+	if input.RoleID == uuid.Nil {
 		return errors.New("role id cannot be empty")
 	}
 
-	if e.PermissionID == uuid.Nil {
+	if input.PermissionID == uuid.Nil {
 		return errors.New("permission id cannot be empty")
 	}
 
 	return nil
 }
 
-func (c *Client) RemovePermissionFromRole(event *RemovePermissionFromRoleEvent) error {
+func (c *Client) RemovePermissionFromRole(input RemovePermissionFromRoleInput) error {
 	// Validate the event
-	err := event.Validate()
+	err := input.Validate()
 	if err != nil {
 		return err
 	}
 
 	// Create the endpoint URL
-	endpoint := fmt.Sprintf("%s/api/roles/%s/permissions/%s", c.BaseURL, event.RoleID, event.PermissionID)
+	endpoint := fmt.Sprintf("%s/api/roles/%s/permissions/%s", c.BaseURL, input.RoleID, input.PermissionID)
 
 	// Create a new HTTP request
 	req, err := http.NewRequest(http.MethodDelete, endpoint, nil)
@@ -459,9 +510,9 @@ func (c *Client) RemovePermissionFromRole(event *RemovePermissionFromRoleEvent) 
 }
 
 // GetRolesByPermissionID retrieves all roles associated with a permission identified by its ID.
-func (c *Client) GetRolesByPermissionID(permissionID uuid.UUID) ([]Role, error) {
+func (c *Client) GetRolesByPermissionID(input GetRolesByPermissionIDInput) ([]Role, error) {
 	// Create a new HTTP request
-	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/api/permissions/%s/roles", c.BaseURL, permissionID), nil)
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/api/permissions/%s/roles", c.BaseURL, input.PermissionID), nil)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create new request: %w", err)
 	}
@@ -495,13 +546,13 @@ func (c *Client) GetRolesByPermissionID(permissionID uuid.UUID) ([]Role, error) 
 }
 
 // IsPermissionAssignedToRole checks if a permission is assigned to a role.
-func (c *Client) IsPermissionAssignedToRole(roleID, permissionID uuid.UUID) (bool, error) {
+func (c *Client) IsPermissionAssignedToRole(input IsPermissionAssignedToRoleInput) (bool, error) {
 	// Create the URL for the request
 	u, err := url.Parse(c.BaseURL)
 	if err != nil {
 		return false, fmt.Errorf("unable to parse base url: %w", err)
 	}
-	u.Path = path.Join(u.Path, fmt.Sprintf("/api/roles/%s/permissions/%s", roleID, permissionID))
+	u.Path = path.Join(u.Path, fmt.Sprintf("/api/roles/%s/permissions/%s", input.RoleID, input.PermissionID))
 
 	// Create a new HTTP request
 	req, err := http.NewRequest(http.MethodGet, u.String(), nil)

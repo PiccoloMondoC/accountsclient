@@ -1,3 +1,4 @@
+// sky-accounts/pkg/clientlib/accountslib/service_accounts.go
 package accountslib
 
 import (
@@ -32,18 +33,61 @@ type ServiceAccountData struct {
 	ExpiresAt   *time.Time `json:"expires_at,omitempty"`
 }
 
+// CreateServiceAccountInput represents the input data for a new service account.
+type CreateServiceAccountInput struct {
+	ServiceName string     `json:"service_name"`
+	Roles       []string   `json:"roles"`
+	ExpiresAt   *time.Time `json:"expires_at,omitempty"`
+}
+
+// UpdateServiceAccountInput represents the input data for updating a service account.
+type UpdateServiceAccountInput struct {
+	ID          uuid.UUID  `json:"id"`
+	ServiceName string     `json:"service_name"`
+	Roles       []string   `json:"roles"`
+	ExpiresAt   *time.Time `json:"expires_at,omitempty"`
+}
+
+// AssignRoleInput represents the input data for assigning a role to a service account.
+type AssignRoleInput struct {
+	ServiceAccountID uuid.UUID `json:"service_account_id"`
+	RoleID           uuid.UUID `json:"role_id"`
+}
+
+// RemoveRoleInput represents the input data for removing a role from a service account.
+type RemoveRoleInput struct {
+	ServiceAccountID uuid.UUID `json:"service_account_id"`
+	RoleID           uuid.UUID `json:"role_id"`
+}
+
+// GetRolesInput represents the input data for retrieving roles of a service account.
+type GetRolesInput struct {
+	ServiceAccountID uuid.UUID `json:"service_account_id"`
+}
+
+// GetServiceAccountsInput represents the input data for retrieving service accounts by a role ID.
+type GetServiceAccountsInput struct {
+	RoleID uuid.UUID `json:"role_id"`
+}
+
+// RoleAssignmentInput represents the input data for checking a role assignment.
+type RoleAssignmentInput struct {
+	ServiceAccountID uuid.UUID `json:"service_account_id"`
+	RoleID           uuid.UUID `json:"role_id"`
+}
+
 // CreateServiceAccount creates a new service account by making a POST request to the server.
-func (c *Client) CreateServiceAccount(serviceAccount *ServiceAccountData) (*ServiceAccount, error) {
+func (c *Client) CreateServiceAccount(input CreateServiceAccountInput) (*ServiceAccount, error) {
 	// Validate the input
-	if strings.TrimSpace(serviceAccount.ServiceName) == "" {
+	if strings.TrimSpace(input.ServiceName) == "" {
 		return nil, errors.New("service name is required")
 	}
-	if len(serviceAccount.Roles) == 0 {
+	if len(input.Roles) == 0 {
 		return nil, errors.New("at least one role is required")
 	}
 
 	// Marshal the service account data
-	jsonPayload, err := json.Marshal(serviceAccount)
+	jsonPayload, err := json.Marshal(input)
 	if err != nil {
 		return nil, err
 	}
@@ -159,11 +203,15 @@ func (c *Client) GetServiceAccountByName(serviceName string) (*ServiceAccount, e
 }
 
 // UpdateServiceAccount sends a request to update a service account.
-func (c *Client) UpdateServiceAccount(serviceAccount *ServiceAccount) error {
-	// Validate the input
-	if serviceAccount == nil {
-		return errors.New("serviceAccount cannot be nil")
+func (c *Client) UpdateServiceAccount(input UpdateServiceAccountInput) error {
+	serviceAccount := &ServiceAccount{
+		ID:          input.ID,
+		ServiceName: input.ServiceName,
+		Roles:       input.Roles,
+		ExpiresAt:   input.ExpiresAt,
 	}
+
+	// Validate the input
 	if serviceAccount.ID == uuid.Nil {
 		return errors.New("service account ID is required")
 	}
@@ -270,21 +318,15 @@ func (c *Client) ListServiceAccounts() ([]ServiceAccount, error) {
 	return serviceAccounts, nil
 }
 
-func (c *Client) AssignRoleToServiceAccount(serviceAccountID, roleID uuid.UUID) error {
-	// Create the payload
-	payload := map[string]uuid.UUID{
-		"service_account_id": serviceAccountID,
-		"role_id":            roleID,
-	}
-
+func (c *Client) AssignRoleToServiceAccount(input AssignRoleInput) error {
 	// Marshal the payload
-	jsonPayload, err := json.Marshal(payload)
+	jsonPayload, err := json.Marshal(input)
 	if err != nil {
 		return err
 	}
 
 	// Create a new HTTP request
-	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/api/service-accounts/%s/roles", c.BaseURL, serviceAccountID), bytes.NewBuffer(jsonPayload))
+	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/api/service-accounts/%s/roles", c.BaseURL, input.ServiceAccountID), bytes.NewBuffer(jsonPayload))
 	if err != nil {
 		return fmt.Errorf("unable to create new request: %w", err)
 	}
@@ -311,14 +353,14 @@ func (c *Client) AssignRoleToServiceAccount(serviceAccountID, roleID uuid.UUID) 
 }
 
 // RemoveRoleFromServiceAccount removes a role from a service account.
-func (c *Client) RemoveRoleFromServiceAccount(serviceAccountID uuid.UUID, roleID uuid.UUID) error {
+func (c *Client) RemoveRoleFromServiceAccount(input RemoveRoleInput) error {
 	// Create the request URL
 	requestURL, err := url.Parse(c.BaseURL)
 	if err != nil {
 		return err
 	}
 
-	requestURL.Path = path.Join(requestURL.Path, fmt.Sprintf("/api/service_accounts/%s/roles/%s", serviceAccountID, roleID))
+	requestURL.Path = path.Join(requestURL.Path, fmt.Sprintf("/api/service_accounts/%s/roles/%s", input.ServiceAccountID, input.RoleID))
 
 	// Create a new HTTP request
 	req, err := http.NewRequest(http.MethodDelete, requestURL.String(), nil)
@@ -348,9 +390,9 @@ func (c *Client) RemoveRoleFromServiceAccount(serviceAccountID uuid.UUID, roleID
 }
 
 // GetRolesByServiceAccountID retrieves roles associated with a specific service account ID
-func (c *Client) GetRolesByServiceAccountID(serviceAccountID uuid.UUID) ([]Role, error) {
+func (c *Client) GetRolesByServiceAccountID(input GetRolesInput) ([]Role, error) {
 	// Create a new HTTP request
-	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/api/serviceaccounts/%s/roles", c.BaseURL, serviceAccountID), nil)
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/api/serviceaccounts/%s/roles", c.BaseURL, input.ServiceAccountID), nil)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create new request: %w", err)
 	}
@@ -383,9 +425,9 @@ func (c *Client) GetRolesByServiceAccountID(serviceAccountID uuid.UUID) ([]Role,
 	return roles, nil
 }
 
-func (c *Client) GetServiceAccountsByRoleID(roleID uuid.UUID) ([]ServiceAccount, error) {
+func (c *Client) GetServiceAccountsByRoleID(input GetServiceAccountsInput) ([]ServiceAccount, error) {
 	// Create a new HTTP request
-	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/api/roles/%s/service-accounts", c.BaseURL, roleID.String()), nil)
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/api/roles/%s/service-accounts", c.BaseURL, input.RoleID.String()), nil)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create new request: %w", err)
 	}
@@ -419,14 +461,14 @@ func (c *Client) GetServiceAccountsByRoleID(roleID uuid.UUID) ([]ServiceAccount,
 	return serviceAccounts, nil
 }
 
-func (c *Client) IsRoleAssignedToServiceAccount(serviceAccountID, roleID uuid.UUID) (bool, error) {
+func (c *Client) IsRoleAssignedToServiceAccount(input RoleAssignmentInput) (bool, error) {
 	// Construct the request URL
 	reqURL, err := url.Parse(c.BaseURL)
 	if err != nil {
 		return false, fmt.Errorf("invalid base URL: %w", err)
 	}
 
-	reqURL.Path = path.Join(reqURL.Path, "api", "service_accounts", serviceAccountID.String(), "roles", roleID.String())
+	reqURL.Path = path.Join(reqURL.Path, "api", "service_accounts", input.ServiceAccountID.String(), "roles", input.RoleID.String())
 
 	// Create a new HTTP request
 	req, err := http.NewRequest(http.MethodGet, reqURL.String(), nil)
@@ -461,17 +503,4 @@ func (c *Client) IsRoleAssignedToServiceAccount(serviceAccountID, roleID uuid.UU
 	}
 
 	return result.IsRoleAssigned, nil
-}
-
-func (t *Token) Validate() error {
-	if t.UserID == uuid.Nil {
-		return errors.New("user ID is required")
-	}
-	if t.Scope == "" {
-		return errors.New("scope is required")
-	}
-	if t.Expiry.Before(time.Now()) {
-		return errors.New("expiry must be a future time")
-	}
-	return nil
 }

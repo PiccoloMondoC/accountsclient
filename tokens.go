@@ -1,3 +1,4 @@
+// sky-accounts/pkg/clientlib/accountslib/tokens.go
 package accountslib
 
 import (
@@ -26,12 +27,57 @@ type Token struct {
 	Error     error
 }
 
+// GetTokenByPlaintextInput represents the input data for retrieving a token by plaintext.
+type GetTokenByPlaintextInput struct {
+	Plaintext string `json:"plaintext"`
+}
+
+// CreateTokenInput represents the input data for creating a new token.
+type CreateTokenInput struct {
+	UserID uuid.UUID `json:"user_id"`
+	Scope  string    `json:"scope"`
+}
+
+// GetTokensByUserIDInput represents the input data for retrieving a token by user ID.
+type GetTokensByUserIDInput struct {
+	UserID uuid.UUID `json:"user_id"`
+}
+
+// GetTokensByScopeInput represents the input data for retrieving a token by scope.
+type GetTokensByScopeInput struct {
+	Scope string `json:"scope"`
+}
+
+// DeleteTokenInput represents the input data for deleting a token.
+type DeleteTokenInput struct {
+	UserID  uuid.UUID `json:"userId"`
+	TokenID uuid.UUID `json:"tokenId"`
+}
+
+// DeleteTokensByUserIDInput represents the input for deleting all tokens of a user.
+type DeleteTokensByUserIDInput struct {
+	UserID uuid.UUID `json:"userId"`
+}
+
+func (t *Token) Validate() error {
+	if t.UserID == uuid.Nil {
+		return errors.New("user ID is required")
+	}
+	if t.Scope == "" {
+		return errors.New("scope is required")
+	}
+	if t.Expiry.Before(time.Now()) {
+		return errors.New("expiry must be a future time")
+	}
+	return nil
+}
+
 // CreateToken creates a new token for a user and returns it.
-func (c *Client) CreateToken(userID uuid.UUID, scope string) (*Token, error) {
+func (c *Client) CreateToken(input CreateTokenInput) (*Token, error) {
 	// Create the payload
 	payload := Token{
-		UserID: userID,
-		Scope:  scope,
+		UserID: input.UserID,
+		Scope:  input.Scope,
 		Expiry: time.Now().Add(time.Hour * 24), // token expires after 24 hours
 	}
 
@@ -80,9 +126,9 @@ func (c *Client) CreateToken(userID uuid.UUID, scope string) (*Token, error) {
 	return &createdToken, nil
 }
 
-func (c *Client) GetTokenByPlaintext(plaintext string) (*Token, error) {
+func (c *Client) GetTokenByPlaintext(input GetTokenByPlaintextInput) (*Token, error) {
 	// Create the new HTTP request
-	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/api/tokens/%s", c.BaseURL, url.PathEscape(plaintext)), nil)
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/api/tokens/%s", c.BaseURL, url.PathEscape(input.Plaintext)), nil)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create new request: %w", err)
 	}
@@ -115,9 +161,9 @@ func (c *Client) GetTokenByPlaintext(plaintext string) (*Token, error) {
 }
 
 // GetTokensByUserID gets all tokens associated with a user ID.
-func (c *Client) GetTokensByUserID(userID uuid.UUID) ([]Token, error) {
+func (c *Client) GetTokensByUserID(input GetTokensByUserIDInput) ([]Token, error) {
 	// Create a new HTTP request
-	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/api/users/%s/tokens", c.BaseURL, userID), nil)
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/api/users/%s/tokens", c.BaseURL, input.UserID), nil)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create new request: %w", err)
 	}
@@ -156,9 +202,10 @@ func (c *Client) GetTokensByUserID(userID uuid.UUID) ([]Token, error) {
 	return tokens, nil
 }
 
-func (c *Client) GetTokensByScope(scope string) ([]Token, error) {
+// GetTokensByScope gets all tokens associated with a scope.
+func (c *Client) GetTokensByScope(input GetTokensByScopeInput) ([]Token, error) {
 	// Create a new HTTP request
-	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/api/tokens/scope/%s", c.BaseURL, url.PathEscape(scope)), nil)
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/api/tokens/scope/%s", c.BaseURL, url.PathEscape(input.Scope)), nil)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create new request: %w", err)
 	}
@@ -191,13 +238,14 @@ func (c *Client) GetTokensByScope(scope string) ([]Token, error) {
 	return tokens, nil
 }
 
-func (c *Client) DeleteToken(userID uuid.UUID, tokenID uuid.UUID) error {
+// DeleteToken deletes a token associated with a user.
+func (c *Client) DeleteToken(input DeleteTokenInput) error {
 	// Validate the UserID and TokenID
-	if userID == uuid.Nil {
+	if input.UserID == uuid.Nil {
 		return errors.New("user ID must be non-nil UUID")
 	}
 
-	if tokenID == uuid.Nil {
+	if input.TokenID == uuid.Nil {
 		return errors.New("token ID must be non-nil UUID")
 	}
 
@@ -207,7 +255,7 @@ func (c *Client) DeleteToken(userID uuid.UUID, tokenID uuid.UUID) error {
 		return fmt.Errorf("unable to parse base URL: %w", err)
 	}
 
-	reqURL.Path = path.Join(reqURL.Path, "api", "users", userID.String(), "tokens", tokenID.String())
+	reqURL.Path = path.Join(reqURL.Path, "api", "users", input.UserID.String(), "tokens", input.TokenID.String())
 
 	// Create a new HTTP request
 	req, err := http.NewRequest(http.MethodDelete, reqURL.String(), nil)
@@ -237,9 +285,9 @@ func (c *Client) DeleteToken(userID uuid.UUID, tokenID uuid.UUID) error {
 }
 
 // DeleteTokensByUserID sends a request to the server to delete all tokens for the given user ID.
-func (c *Client) DeleteTokensByUserID(userID uuid.UUID) error {
+func (c *Client) DeleteTokensByUserID(input DeleteTokensByUserIDInput) error {
 	// Create a new HTTP request
-	req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("%s/api/tokens/%s", c.BaseURL, userID.String()), nil)
+	req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("%s/api/tokens/%s", c.BaseURL, input.UserID.String()), nil)
 	if err != nil {
 		return fmt.Errorf("unable to create new request: %w", err)
 	}

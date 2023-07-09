@@ -1,3 +1,4 @@
+// sky-accounts/pkg/clientlib/accountslib/metadata_keys.go
 package accountslib
 
 import (
@@ -89,7 +90,7 @@ func (c *Client) CreateMetadataKey(input CreateMetadataKeyInput) (*MetadataKey, 
 }
 
 func (c *Client) GetMetadataKeyByID(input GetMetadataKeyByIDInput) (*UserMetadata, error) {
-	endpoint := fmt.Sprintf("%s/metadata-keys/%s", c.BaseURL, metadataKeyID)
+	endpoint := fmt.Sprintf("%s/metadata-keys/%s", c.BaseURL, input.MetadataKeyID)
 	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %v", err)
@@ -98,7 +99,7 @@ func (c *Client) GetMetadataKeyByID(input GetMetadataKeyByIDInput) (*UserMetadat
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+c.Token)
 	req.Header.Set("X-API-KEY", c.ApiKey)
-	req.Header.Set("UserID", userID.String()) // Pass UserID as a header
+	req.Header.Set("UserID", input.UserID.String()) // Pass UserID as a header
 
 	resp, err := c.HttpClient.Do(req)
 	if err != nil {
@@ -131,7 +132,7 @@ func (c *Client) GetMetadataKeyByKeyName(input GetMetadataKeyByKeyNameInput) (*M
 	if err != nil {
 		return nil, fmt.Errorf("invalid base URL: %w", err)
 	}
-	reqURL.Path = path.Join(reqURL.Path, "metadata-keys", keyName)
+	reqURL.Path = path.Join(reqURL.Path, "metadata-keys", input.KeyName)
 
 	// Create the HTTP request
 	req, err := http.NewRequest(http.MethodGet, reqURL.String(), nil)
@@ -165,13 +166,13 @@ func (c *Client) GetMetadataKeyByKeyName(input GetMetadataKeyByKeyNameInput) (*M
 
 func (c *Client) UpdateMetadataKey(input UpdateMetadataKeyInput) (*MetadataKey, error) {
 	// Marshal MetadataKey to JSON
-	data, err := json.Marshal(metadataKey)
+	data, err := json.Marshal(input)
 	if err != nil {
 		return nil, fmt.Errorf("unable to marshal MetadataKey object: %v", err)
 	}
 
 	// Prepare HTTP request
-	reqURL, err := url.Parse(path.Join(c.BaseURL, "metadatakey", metadataKey.ID.String()))
+	reqURL, err := url.Parse(path.Join(c.BaseURL, "metadatakey", input.ID.String()))
 	if err != nil {
 		return nil, fmt.Errorf("unable to parse URL: %v", err)
 	}
@@ -215,7 +216,7 @@ func (c *Client) DeleteMetadataKey(input DeleteMetadataKeyInput) error {
 	if err != nil {
 		return fmt.Errorf("could not parse base URL: %v", err)
 	}
-	u.Path = path.Join(u.Path, fmt.Sprintf("metadata-keys/%s", metadataKeyID))
+	u.Path = path.Join(u.Path, fmt.Sprintf("metadata-keys/%s", input))
 
 	// Create the request
 	req, err := http.NewRequest(http.MethodDelete, u.String(), nil)
