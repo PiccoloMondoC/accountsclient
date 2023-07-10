@@ -285,7 +285,7 @@ func (c *Client) DeletePermission(input DeletePermissionInput) error {
 	return nil
 }
 
-func (c *Client) ListPermissions(input DoesPermissionExistInput) (*ListPermissionsResponse, error) {
+func (c *Client) ListPermissions() (*ListPermissionsResponse, error) {
 	// Create a new HTTP request
 	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/api/permissions", c.BaseURL), nil)
 	if err != nil {
