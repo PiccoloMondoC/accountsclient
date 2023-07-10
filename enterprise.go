@@ -1,3 +1,4 @@
+// sky-accounts/pkg/clientlib/accountslib/enterprise.go
 package accountslib
 
 import (
@@ -40,6 +41,13 @@ type AddMemberToEnterpriseAccountEvent struct {
 	EnterpriseID uuid.UUID `json:"enterprise_id"`
 }
 
+// AddMemberToEnterpriseAccountInput is the data structure for the request to add a member to an enterprise account.
+type AddMemberToEnterpriseAccountInput struct {
+	EnterpriseID uuid.UUID `json:"enterprise_id"`
+	UserID       uuid.UUID `json:"user_id"`
+	RoleID       uuid.UUID `json:"role_id"`
+}
+
 type EnterpriseMembers struct {
 	Members []AccountMembership `json:"members"`
 }
@@ -49,13 +57,6 @@ type UpdateMemberRoleInEnterpriseAccountRequest struct {
 	UserID       uuid.UUID `json:"user_id"`
 	EnterpriseID uuid.UUID `json:"enterprise_id"`
 	NewRoleID    uuid.UUID `json:"new_role_id"`
-}
-
-// AddMemberToEnterpriseAccountInput is the data structure for the request to add a member to an enterprise account.
-type AddMemberToEnterpriseAccountInput struct {
-	EnterpriseID uuid.UUID `json:"enterprise_id"`
-	UserID       uuid.UUID `json:"user_id"`
-	RoleID       uuid.UUID `json:"role_id"`
 }
 
 func (c *Client) CreateEnterpriseAccount(input CreateEnterpriseAccountInput) (*Enterprise, error) {
