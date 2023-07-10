@@ -1,3 +1,4 @@
+// sky-accounts/pkg/clientlib/accountslib/users.go
 package accountslib
 
 import (
@@ -302,23 +303,23 @@ func (d *CheckPasswordHashData) Validate() error {
 	)
 }
 
-func (c *Client) CheckPasswordHash(data *CheckPasswordHashData) error {
+func (c *Client) CheckPasswordHash(data *CheckPasswordHashData) (bool, error) {
 	// Validate the input data
 	err := data.Validate()
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	// Marshal the input data
 	jsonData, err := json.Marshal(data)
 	if err != nil {
-		return err
+		return false, fmt.Errorf("unable to marshal data: %w", err)
 	}
 
 	// Create a new HTTP request
 	req, err := http.NewRequest(http.MethodPost, c.BaseURL+"/api/checkpassword", bytes.NewBuffer(jsonData))
 	if err != nil {
-		return fmt.Errorf("unable to create new request: %w", err)
+		return false, fmt.Errorf("unable to create new request: %w", err)
 	}
 
 	// Set the appropriate headers
@@ -329,17 +330,17 @@ func (c *Client) CheckPasswordHash(data *CheckPasswordHashData) error {
 	// Send the HTTP request
 	res, err := c.HttpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("unable to send request: %w", err)
+		return false, fmt.Errorf("unable to send request: %w", err)
 	}
 	defer res.Body.Close()
 
 	// Check the status code
 	if res.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(res.Body)
-		return fmt.Errorf("unexpected status code: got %v, body: %s", res.StatusCode, body)
+		return false, fmt.Errorf("unexpected status code: got %v, body: %s", res.StatusCode, body)
 	}
 
-	return nil
+	return true, nil
 }
 
 func (u *UpdateUserPayload) Validate() error {
