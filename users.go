@@ -1,3 +1,4 @@
+// sky-accounts/pkg/clientlib/accountslib/users.go
 package accountslib
 
 import (
@@ -40,6 +41,11 @@ type User struct {
 type UserRegistrationData struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
+}
+
+type CheckPasswordHashData struct {
+	UserID   uuid.UUID `json:"userId"`
+	Password string    `json:"password"`
 }
 
 type UpdateUserPayload struct {
@@ -288,6 +294,53 @@ func (c *Client) GetUserByEmail(email string) (*User, error) {
 	}
 
 	return &user, nil
+}
+
+func (d *CheckPasswordHashData) Validate() error {
+	return validation.ValidateStruct(d,
+		validation.Field(&d.UserID, validation.Required),
+		validation.Field(&d.Password, validation.Required, validation.Length(8, 255)),
+	)
+}
+
+func (c *Client) CheckPasswordHash(data *CheckPasswordHashData) error {
+	// Validate the input data
+	err := data.Validate()
+	if err != nil {
+		return err
+	}
+
+	// Marshal the input data
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+
+	// Create a new HTTP request
+	req, err := http.NewRequest(http.MethodPost, c.BaseURL+"/api/checkpassword", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("unable to create new request: %w", err)
+	}
+
+	// Set the appropriate headers
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+c.Token)
+	req.Header.Set("X-API-Key", c.ApiKey)
+
+	// Send the HTTP request
+	res, err := c.HttpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("unable to send request: %w", err)
+	}
+	defer res.Body.Close()
+
+	// Check the status code
+	if res.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(res.Body)
+		return fmt.Errorf("unexpected status code: got %v, body: %s", res.StatusCode, body)
+	}
+
+	return nil
 }
 
 func (u *UpdateUserPayload) Validate() error {
