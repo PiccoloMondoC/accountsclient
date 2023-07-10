@@ -1,3 +1,4 @@
+// sky-accounts/pkg/clientlib/accountslib/permissions.go
 package accountslib
 
 import (
@@ -59,10 +60,10 @@ type GetPermissionsByRoleIDInput struct {
 	RoleID uuid.UUID
 }
 
-func (c *Client) CreatePermission(permission *Permission) (*Permission, error) {
+func (c *Client) CreatePermission(input CreatePermissionInput) (*Permission, error) {
 	// Marshall the Permission struct to JSON
 	payloadBuf := new(bytes.Buffer)
-	err := json.NewEncoder(payloadBuf).Encode(permission)
+	err := json.NewEncoder(payloadBuf).Encode(input)
 	if err != nil {
 		return nil, err
 	}
@@ -108,13 +109,13 @@ func (c *Client) CreatePermission(permission *Permission) (*Permission, error) {
 	return &createdPermission, nil
 }
 
-func (c *Client) GetPermissionByID(permissionID uuid.UUID) (*Permission, error) {
+func (c *Client) GetPermissionByID(input GetPermissionByIDInput) (*Permission, error) {
 	// Define the endpoint URL
 	u, err := url.Parse(c.BaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid base URL: %v", err)
 	}
-	u.Path = path.Join(u.Path, "permissions", permissionID.String())
+	u.Path = path.Join(u.Path, "permissions", input.PermissionID.String())
 
 	// Create the request
 	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
@@ -150,7 +151,7 @@ func (c *Client) GetPermissionByID(permissionID uuid.UUID) (*Permission, error) 
 	return &permission, nil
 }
 
-func (c *Client) GetPermissionByName(permissionName string) (*Permission, error) {
+func (c *Client) GetPermissionByName(input GetPermissionByNameInput) (*Permission, error) {
 	// Create new URL
 	u, err := url.Parse(c.BaseURL)
 	if err != nil {
@@ -158,7 +159,7 @@ func (c *Client) GetPermissionByName(permissionName string) (*Permission, error)
 	}
 
 	// Set the endpoint path
-	u.Path = path.Join(u.Path, "permissions", permissionName)
+	u.Path = path.Join(u.Path, "permissions", input.PermissionName)
 
 	// Prepare request
 	req, err := http.NewRequest(http.MethodGet, u.String(), nil)
@@ -195,14 +196,14 @@ func (c *Client) GetPermissionByName(permissionName string) (*Permission, error)
 	return &permission, nil
 }
 
-func (p *Permission) Validate() error {
+func (input *UpdatePermissionInput) Validate() error {
 	// Check if ID is not empty
-	if p.ID == uuid.Nil {
+	if input.ID == uuid.Nil {
 		return fmt.Errorf("permission ID cannot be empty")
 	}
 
 	// Check if Name is not empty
-	if p.Name == "" {
+	if input.Name == "" {
 		return fmt.Errorf("permission Name cannot be empty")
 	}
 
@@ -211,28 +212,22 @@ func (p *Permission) Validate() error {
 	return nil
 }
 
-func (c *Client) UpdatePermission(permission *Permission) error {
-	// Create the payload
-	payload := Permission{
-		ID:          permission.ID,
-		Name:        permission.Name,
-		Description: permission.Description,
-	}
+func (c *Client) UpdatePermission(input UpdatePermissionInput) error {
 
 	// Validate the payload
-	err := payload.Validate()
+	err := input.Validate()
 	if err != nil {
 		return err
 	}
 
 	// Marshal the payload
-	jsonPayload, err := json.Marshal(payload)
+	jsonPayload, err := json.Marshal(input)
 	if err != nil {
 		return err
 	}
 
 	// Create a new HTTP request
-	req, err := http.NewRequest(http.MethodPut, fmt.Sprintf("%s/api/permissions/%s", c.BaseURL, permission.ID), bytes.NewBuffer(jsonPayload))
+	req, err := http.NewRequest(http.MethodPut, fmt.Sprintf("%s/api/permissions/%s", c.BaseURL, input.ID), bytes.NewBuffer(jsonPayload))
 	if err != nil {
 		return fmt.Errorf("unable to create new request: %w", err)
 	}
@@ -258,14 +253,14 @@ func (c *Client) UpdatePermission(permission *Permission) error {
 	return nil
 }
 
-func (c *Client) DeletePermission(permissionID uuid.UUID) error {
+func (c *Client) DeletePermission(input DeletePermissionInput) error {
 	// Validate permissionID
-	if permissionID == uuid.Nil {
+	if input.ID == uuid.Nil {
 		return errors.New("invalid permissionID")
 	}
 
 	// Create a new HTTP request
-	req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("%s/api/permissions/%s", c.BaseURL, permissionID), nil)
+	req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("%s/api/permissions/%s", c.BaseURL, input), nil)
 	if err != nil {
 		return fmt.Errorf("unable to create new request: %w", err)
 	}
@@ -291,7 +286,7 @@ func (c *Client) DeletePermission(permissionID uuid.UUID) error {
 	return nil
 }
 
-func (c *Client) ListPermissions() (*ListPermissionsResponse, error) {
+func (c *Client) ListPermissions(input DoesPermissionExistInput) (*ListPermissionsResponse, error) {
 	// Create a new HTTP request
 	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/api/permissions", c.BaseURL), nil)
 	if err != nil {
