@@ -1,4 +1,3 @@
-// sky-accounts/pkg/clientlib/accountslib/tokens.go
 package accountslib
 
 import (
