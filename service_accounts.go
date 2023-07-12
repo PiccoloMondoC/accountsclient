@@ -1,7 +1,9 @@
+// sky-accounts/pkg/clientlib/accountslib/service_accounts.go
 package accountslib
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,7 +11,6 @@ import (
 	"net/http"
 	"net/url"
 	"path"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,25 +19,17 @@ import (
 // ServiceAccount represents the structure of a service account.
 type ServiceAccount struct {
 	ID          uuid.UUID  `db:"id" json:"id"`
-	Secret      string     `db:"secret" json:"-"`
+	Secret      string     `db:"secret" json:"secret"`
 	ServiceName string     `db:"service_name" json:"service_name"`
 	Roles       []string   `json:"roles"`
 	CreatedAt   time.Time  `db:"created_at" json:"created_at"`
 	ExpiresAt   *time.Time `db:"expires_at" json:"expires_at,omitempty"`
 }
 
-// ServiceAccountData represents the input data for a new service account.
-type ServiceAccountData struct {
-	ServiceName string     `json:"service_name"`
-	Roles       []string   `json:"roles"`
-	ExpiresAt   *time.Time `json:"expires_at,omitempty"`
-}
-
-// CreateServiceAccountInput represents the input data for a new service account.
-type CreateServiceAccountInput struct {
-	ServiceName string     `json:"service_name"`
-	Roles       []string   `json:"roles"`
-	ExpiresAt   *time.Time `json:"expires_at,omitempty"`
+type RegisterServiceAccountInput struct {
+	ServiceName string `json:"name"`
+	Description string `json:"description"`
+	Role        string `json:"role"`
 }
 
 // UpdateServiceAccountInput represents the input data for updating a service account.
@@ -75,55 +68,47 @@ type RoleAssignmentInput struct {
 	RoleID           uuid.UUID `json:"role_id"`
 }
 
-// CreateServiceAccount creates a new service account by making a POST request to the server.
-func (c *Client) CreateServiceAccount(input CreateServiceAccountInput) (*ServiceAccount, error) {
-	// Validate the input
-	if strings.TrimSpace(input.ServiceName) == "" {
-		return nil, errors.New("service name is required")
-	}
-	if len(input.Roles) == 0 {
-		return nil, errors.New("at least one role is required")
-	}
-
-	// Marshal the service account data
-	jsonPayload, err := json.Marshal(input)
+// RegisterServiceAccount registers a new service account with the provided name and roles.
+func (c *Client) RegisterServiceAccount(ctx context.Context, input RegisterServiceAccountInput) (*ServiceAccount, error) {
+	requestURL, err := url.Parse(c.BaseURL)
 	if err != nil {
 		return nil, err
 	}
 
-	// Create a new HTTP request
-	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/api/service-accounts", c.BaseURL), bytes.NewBuffer(jsonPayload))
+	requestURL.Path = path.Join(requestURL.Path, "/api/v1/service_account/")
+
+	payload, err := json.Marshal(input)
 	if err != nil {
-		return nil, fmt.Errorf("unable to create new request: %w", err)
+		return nil, err
 	}
 
-	// Set the appropriate headers
+	req, err := http.NewRequestWithContext(ctx, "PUT", requestURL.String(), bytes.NewBuffer(payload))
+	if err != nil {
+		return nil, err
+	}
+
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.Token)
-	req.Header.Set("X-API-Key", c.ApiKey)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.Token))
+	req.Header.Set("X-Api-Key", c.ApiKey)
 
-	// Send the HTTP request
-	res, err := c.HttpClient.Do(req)
+	resp, err := c.HttpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("unable to send request: %w", err)
+		return nil, err
 	}
-	defer res.Body.Close()
+	defer resp.Body.Close()
 
-	// Check the status code
-	if res.StatusCode != http.StatusCreated {
-		body, _ := io.ReadAll(res.Body)
-		return nil, fmt.Errorf("unexpected status code: got %v, body: %s", res.StatusCode, body)
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to register service account: status code %d, message: %s", resp.StatusCode, string(bodyBytes))
 	}
 
-	// Decode the response body
-	var createdServiceAccount ServiceAccount
-	err = json.NewDecoder(res.Body).Decode(&createdServiceAccount)
+	var registeredServiceAccount ServiceAccount
+	err = json.NewDecoder(resp.Body).Decode(&registeredServiceAccount)
 	if err != nil {
-		return nil, fmt.Errorf("unable to decode response body: %w", err)
+		return nil, err
 	}
 
-	// Return the created service account
-	return &createdServiceAccount, nil
+	return &registeredServiceAccount, nil
 }
 
 // GetServiceAccountByID sends a GET request to the server to retrieve a service account by its ID
