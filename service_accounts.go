@@ -1,3 +1,4 @@
+// sky-accounts/pkg/clientlib/accountslib/service_accounts.go
 package accountslib
 
 import (
@@ -27,7 +28,6 @@ type ServiceAccount struct {
 
 type RegisterServiceAccountInput struct {
 	ServiceName string `json:"name"`
-	Description string `json:"description"`
 	Role        string `json:"role"`
 }
 

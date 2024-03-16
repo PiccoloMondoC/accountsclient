@@ -1,11 +1,14 @@
+// sky-accounts/pkg/clientlib/accountslib/users.go
 package accountslib
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"path"
@@ -972,4 +975,73 @@ func (c *Client) IsUserInRole(data *UserInRoleCheckData) (bool, error) {
 	}
 
 	return response.InRole, nil
+}
+
+// Potentially pending functions that I may need to consider
+
+// PermissionRequest represents the JSON request body sent to the authentication server to check a service account's permissions.
+type PermissionRequest struct {
+	Token       string `json:"token"`
+	Permissions string `json:"permissions"`
+}
+
+// PermissionResponse represents the JSON response returned from the authentication server when checking a service account's permissions.
+type PermissionResponse struct {
+	HasPermission bool `json:"has_permission"`
+}
+
+// This is a custom error type
+type CheckUserAuthorizationError struct {
+	BaseError  error
+	StatusCode int
+}
+
+func (e *CheckUserAuthorizationError) Error() string {
+	return fmt.Sprintf("received non-200 response code (%d): %v", e.StatusCode, e.BaseError)
+}
+
+// CheckUserAuthorization verifies a user's authorization to perform a certain action.
+func (c *Client) CheckUserAuthorization(ctx context.Context, token, permission string) (bool, error) {
+	// Prepare the request
+	permissionRequest := PermissionRequest{Token: token, Permissions: permission}
+	body, err := json.Marshal(permissionRequest)
+	if err != nil {
+		log.Printf("Failed to marshal permissionRequest: %v", err)
+		return false, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/check-permission", bytes.NewBuffer(body))
+	if err != nil {
+		log.Printf("Failed to create new request: %v", err)
+		return false, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", c.ApiKey)
+
+	// Send the request
+	resp, err := c.HttpClient.Do(req)
+	if err != nil {
+		log.Printf("Failed to send request: %v", err)
+		return false, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		// Handle non-200 status codes
+		err = &CheckUserAuthorizationError{
+			BaseError:  errors.New("received non-200 response code"),
+			StatusCode: resp.StatusCode,
+		}
+		log.Printf("Received non-200 response. StatusCode: %v, Error: %v", resp.StatusCode, err)
+		return false, err
+	}
+
+	// Decode the response
+	var permissionResponse PermissionResponse
+	if err := json.NewDecoder(resp.Body).Decode(&permissionResponse); err != nil {
+		log.Printf("Failed to decode response: %v", err)
+		return false, err
+	}
+
+	return permissionResponse.HasPermission, nil
 }
