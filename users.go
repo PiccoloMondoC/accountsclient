@@ -1,4 +1,3 @@
-// sky-accounts/pkg/clientlib/accountslib/users.go
 package accountslib
 
 import (
