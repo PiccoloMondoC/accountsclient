@@ -1,4 +1,4 @@
-package accountsclient
+package accountslib
 
 import (
 	"bytes"
