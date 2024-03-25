@@ -1,5 +1,5 @@
 // sky-accounts/pkg/clientlib/accountslib/accounts_link.go
-package accountslib
+package accountsclient
 
 import (
 	"bytes"
